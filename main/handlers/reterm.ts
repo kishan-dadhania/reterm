@@ -54,7 +54,8 @@ export function registerRetermHandlers(): void {
   ipcMain.handle("terminal:execute", async (_event, params: unknown) => {
     const p = params as Record<string, unknown>;
     const command = assertString(p?.command, "command");
-    const id = await executeCommand(command);
+    const cwd = assertOptionalString(p?.cwd, "cwd");
+    const id = await executeCommand(command, cwd);
     return { id };
   });
 
@@ -150,4 +151,28 @@ export function registerRetermHandlers(): void {
     ipcMain.broadcast("settings:retention-changed", { retentionDays });
     return { retentionDays };
   });
+
+  // Trigger auto-import on startup asynchronously
+  importShellHistory("auto")
+    .then((imported) => {
+      if (imported > 0) {
+        console.log(`[reterm:auto-import] Startup imported ${imported} commands`);
+      }
+    })
+    .catch((err) => {
+      console.error("[reterm:auto-import] Startup import failed", err);
+    });
+
+  // Schedule periodic auto-import every 5 minutes
+  setInterval(() => {
+    importShellHistory("auto")
+      .then((imported) => {
+        if (imported > 0) {
+          console.log(`[reterm:auto-import] Periodic imported ${imported} commands`);
+        }
+      })
+      .catch((err) => {
+        console.error("[reterm:auto-import] Periodic import failed", err);
+      });
+  }, 5 * 60 * 1000);
 }

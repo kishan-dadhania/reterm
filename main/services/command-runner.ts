@@ -32,7 +32,10 @@ export function getSessionCwd(): string {
  * Execute a command in the persistent session.
  * Returns the entry id immediately; output is streamed via broadcast.
  */
-export async function executeCommand(command: string): Promise<string> {
+export async function executeCommand(command: string, cwd?: string): Promise<string> {
+  if (cwd) {
+    sessionCwd = cwd;
+  }
   const id = crypto.randomUUID();
   const timestamp = Date.now();
   const shell = process.env.SHELL || "/bin/zsh";
@@ -55,12 +58,20 @@ export async function executeCommand(command: string): Promise<string> {
 
   console.log("[reterm:execute]", { id, command, cwd: sessionCwd });
 
-  // Shell invocation: cd to sessionCwd, run command, then print the new PWD
-  // The trailing printf outputs the marker so we can detect cwd changes.
-  // Wrapped in a subshell so `cd` inside the command is visible via $PWD.
+  // Use -i (interactive) + -l (login) so zsh sources both .zprofile AND .zshrc.
+  // This makes aliases, functions, and nvm/pyenv PATH hooks available — matching
+  // what the user sees in a normal terminal window.
+  // We also source .zshrc explicitly as a belt-and-suspenders measure for
+  // shells that skip interactive sourcing in non-TTY contexts.
+  const rcSource = shell.endsWith("zsh")
+    ? `[ -f ~/.zshrc ] && source ~/.zshrc ; `
+    : shell.endsWith("bash")
+    ? `[ -f ~/.bashrc ] && source ~/.bashrc ; [ -f ~/.bash_profile ] && source ~/.bash_profile ; `
+    : "";
+
   const shellArgs = [
-    "-lc",
-    `cd ${shellEscape(sessionCwd)} && ( ${command} ) ; printf "\\n${PWD_MARKER}%s" "$PWD"`,
+    "-ilc",
+    `${rcSource}cd ${shellEscape(sessionCwd)} && ( ${command} ) ; printf "\\n${PWD_MARKER}%s" "$PWD"`,
   ];
 
   const child = spawn(shell, shellArgs, {

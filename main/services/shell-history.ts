@@ -96,7 +96,26 @@ export async function importShellHistory(source: ShellSource): Promise<number> {
       continue;
     }
 
+    let fileMtime = Date.now();
+    try {
+      const stat = await fs.stat(filePath);
+      fileMtime = stat.mtimeMs;
+    } catch {
+      // Ignore
+    }
+
     const parsed = type === "zsh" ? parseZshHistory(raw) : parseBashHistory(raw);
+
+    // Estimate timestamps for commands with timestamp 0 (plain lines/bash history)
+    let currentFallback = fileMtime;
+    for (let idx = parsed.length - 1; idx >= 0; idx--) {
+      if (parsed[idx].timestamp === 0) {
+        parsed[idx].timestamp = currentFallback;
+        currentFallback -= 1000; // sequence backward by 1 second
+      } else {
+        currentFallback = Math.min(currentFallback, parsed[idx].timestamp - 1000);
+      }
+    }
 
     for (const { command, timestamp } of parsed) {
       const key = dedupKey(command, timestamp);
@@ -122,8 +141,8 @@ export async function importShellHistory(source: ShellSource): Promise<number> {
     return 0;
   }
 
-  // Sort by timestamp ascending so newest-first order is preserved after unshift
-  newEntries.sort((a, b) => a.timestamp - b.timestamp);
+  // Sort by timestamp descending so newest-first order is preserved when prepending
+  newEntries.sort((a, b) => b.timestamp - a.timestamp);
 
   const imported = await bulkInsertEntries(newEntries);
   ipcMain.broadcast("history:changed", {});

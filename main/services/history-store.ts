@@ -76,7 +76,7 @@ async function runRetentionCleanup(): Promise<void> {
   const entries = await loadHistory();
   const cutoff = Date.now() - settings.retentionDays * 24 * 60 * 60 * 1000;
   const before = entries.length;
-  historyCache = entries.filter((e) => e.saved || e.timestamp >= cutoff);
+  historyCache = entries.filter((e) => e.saved || e.source === "shell-import" || e.timestamp >= cutoff);
   if (historyCache.length !== before) {
     await persistHistory();
   }
@@ -150,6 +150,23 @@ export async function listEntries(options: ListOptions = {}): Promise<CommandEnt
   }
 
   // Already newest-first (entries are unshifted on insert)
+  const mergedMap = new Map<string, CommandEntry>();
+  for (const e of result) {
+    const key = `${e.cwd}::${e.command}`;
+    const existing = mergedMap.get(key);
+    if (!existing) {
+      mergedMap.set(key, { ...e, labels: [...e.labels] });
+    } else {
+      if (e.saved) {
+        existing.saved = true;
+      }
+      if (e.labels.length > 0) {
+        existing.labels = Array.from(new Set([...existing.labels, ...e.labels]));
+      }
+    }
+  }
+  result = Array.from(mergedMap.values());
+
   return result.slice(0, limit);
 }
 
@@ -162,11 +179,11 @@ export async function getDistinctLabels(): Promise<string[]> {
   return Array.from(set).sort();
 }
 
-/** Bulk-insert entries (used by shell import). Returns number actually inserted. */
 export async function bulkInsertEntries(entries: CommandEntry[]): Promise<number> {
   if (entries.length === 0) return 0;
   await loadHistory();
   historyCache = [...entries, ...historyCache!];
+  historyCache.sort((a, b) => b.timestamp - a.timestamp);
   await persistHistory();
   await runRetentionCleanup();
   return entries.length;

@@ -1,5 +1,5 @@
 /*
- * Glaze framework styles (@import "@glaze/core/..." and @import "tailwindcss")
+ * Glaze framework styles (@import "@glaze/core/...") and @import "tailwindcss")
  * are automatically injected before this file during build and dev.
  * Add your custom styles and @source directives below.
  */
@@ -7,3 +7,54 @@
 /* Tell Tailwind to scan local renderer files for class names */
 @source "./main/**/*.{ts,tsx}";
 @source "./settings/**/*.{ts,tsx}";
+@source "./components/**/*.{ts,tsx}";
+
+/* ── CSS custom properties ─────────────────────────────────────── */
+:root {
+  --rt-success: hsl(142 71% 45%);
+  --rt-error: hsl(0 72% 51%);
+  --rt-amber: hsl(38 92% 50%);
+  --rt-source-terminal: hsl(210 100% 60%);
+  --rt-source-import: hsl(270 70% 65%);
+}
+
+/* ── Monospace utility ─────────────────────────────────────────── */
+.rt-mono {
+  font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+}
+
+/* ── Fade-in animation for new history rows ────────────────────── */
+@keyframes rt-fade-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.rt-fade-in {
+  animation: rt-fade-in 120ms ease-out both;
+}
+
+/* ── Command palette overlay ───────────────────────────────────── */
+.rt-palette-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 15vh;
+  background: hsl(0 0% 0% / 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.rt-palette-panel {
+  width: 640px;
+  max-width: calc(100vw - 48px);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  overflow: hidden;
+  background: hsl(0 0% 12%);
+  border: 1px solid hsl(0 0% 100% / 0.12);
+  box-shadow: 0 24px 64px hsl(0 0% 0% / 0.6), 0 0 0 1px hsl(0 0% 100% / 0.04) inset;
+}
