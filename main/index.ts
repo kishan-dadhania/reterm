@@ -20,7 +20,10 @@ const __dirname = path.dirname(__filename);
 
 // ── IPC Handlers ──────────────────────────────────────────────────────
 // ipcMain is already wired to the IPC server by the runtime bootstrap.
-registerHandlers();
+// registerHandlers is async because it initialises the history store on startup.
+registerHandlers().catch((err) => {
+  logger.error("main", "Failed to register handlers", err);
+});
 
 // ── State ─────────────────────────────────────────────────────────────
 let mainWindow: BrowserWindow | null = null;
@@ -36,10 +39,10 @@ async function createMainWindow() {
   // In production: __dirname = build/main, package.json is at ../../package.json
   const packageJsonPath = path.join(__dirname, "..", "..", "package.json");
 
-  const minWindowWidth = 390;
-  const minWindowHeight = 456;
-  const windowWidth = 1000;
-  const windowHeight = 700;
+  const minWindowWidth = 860;
+  const minWindowHeight = 540;
+  const windowWidth = 1180;
+  const windowHeight = 760;
   let windowTitle = "Glaze App";
 
   try {

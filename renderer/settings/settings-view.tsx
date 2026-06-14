@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Label,
   RadioGroup,
@@ -12,11 +13,20 @@ import {
   FieldGroup,
   FieldLabel,
   FieldSet,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   toast,
 } from "@glaze/core/components";
 import type { NativeThemeInfo } from "@glaze/core/ipc";
 
+const RETENTION_OPTIONS = [30, 45, 60] as const;
+type RetentionDays = (typeof RETENTION_OPTIONS)[number];
+
 export function SettingsView() {
+  const queryClient = useQueryClient();
   const [themeInfo, setThemeInfo] = useState<NativeThemeInfo | null>(null);
   const [_isLoading, setIsLoading] = useState(true);
 
@@ -60,7 +70,7 @@ export function SettingsView() {
   };
 
   useEffect(() => {
-    refreshThemeInfo();
+    void refreshThemeInfo();
   }, []);
 
   const handleThemeChange = async (value: string) => {
@@ -70,6 +80,37 @@ export function SettingsView() {
       await refreshThemeInfo();
     } catch (error) {
       toast.error(`Failed to set theme: ${error}`);
+    }
+  };
+
+  // Retention setting
+  const retentionQuery = useQuery({
+    queryKey: ["settings:retentionDays"],
+    queryFn: () =>
+      window.glazeAPI.glaze.ipc
+        .invoke<{ retentionDays: number }>("settings:get", {})
+        .then((r) => r.retentionDays),
+    staleTime: 60_000,
+  });
+
+  const retentionMutation = useMutation({
+    mutationFn: (retentionDays: number) =>
+      window.glazeAPI.glaze.ipc.invoke<{ retentionDays: number }>("settings:set", { retentionDays }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["settings:retentionDays"], data.retentionDays);
+      toast.success("Retention updated");
+    },
+    onError: (err) => {
+      toast.error(`Failed to save retention: ${err}`);
+    },
+  });
+
+  const retentionDays = retentionQuery.data ?? 30;
+
+  const handleRetentionChange = (value: string) => {
+    const days = parseInt(value, 10) as RetentionDays;
+    if (RETENTION_OPTIONS.includes(days)) {
+      retentionMutation.mutate(days);
     }
   };
 
@@ -84,6 +125,7 @@ export function SettingsView() {
       }
     >
       <div className="px-4 flex flex-col gap-8 mb-8">
+        {/* Appearance */}
         <FieldSet>
           <FieldGroup>
             <Field orientation="horizontal">
@@ -92,7 +134,7 @@ export function SettingsView() {
               </FieldContent>
               <RadioGroup
                 value={themeInfo?.themeSource ?? "system"}
-                onValueChange={handleThemeChange}
+                onValueChange={(v) => void handleThemeChange(v)}
                 orientation="horizontal"
               >
                 <Label>
@@ -108,6 +150,31 @@ export function SettingsView() {
                   Dark
                 </Label>
               </RadioGroup>
+            </Field>
+          </FieldGroup>
+        </FieldSet>
+
+        {/* History */}
+        <FieldSet>
+          <FieldGroup>
+            <Field orientation="horizontal">
+              <FieldContent>
+                <FieldLabel>History Retention</FieldLabel>
+              </FieldContent>
+              <Select
+                value={String(retentionDays)}
+                onValueChange={handleRetentionChange}
+                disabled={retentionQuery.isLoading || retentionMutation.isPending}
+              >
+                <SelectTrigger size="small" variant="transparent">
+                  <SelectValue placeholder="Select days" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="30">30 days</SelectItem>
+                  <SelectItem value="45">45 days</SelectItem>
+                  <SelectItem value="60">60 days</SelectItem>
+                </SelectContent>
+              </Select>
             </Field>
           </FieldGroup>
         </FieldSet>

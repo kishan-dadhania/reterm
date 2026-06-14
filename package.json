@@ -60,6 +60,7 @@
     "lastMigration": "sidebar-height",
     "host": {
       "minVersion": "0.5.0.0"
-    }
+    },
+    "updatedAt": 1781414343750
   }
 }

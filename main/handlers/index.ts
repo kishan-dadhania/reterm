@@ -9,14 +9,22 @@ import { fileURLToPath } from "url";
 
 import { appHandlers } from "./app.js";
 import { getSettingsWindow, openSettingsWindow } from "../windows/settings-window.js";
+import { registerRetermHandlers } from "./reterm.js";
+import { initHistoryStore } from "../services/history-store.js";
 
 import { ipcMain, logger } from "@glaze/core/backend";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export function registerHandlers(): void {
+export async function registerHandlers(): Promise<void> {
   logger.info("handlers", "Registering IPC handlers...");
+
+  // Initialise persistence layer (loads cache + runs retention cleanup)
+  await initHistoryStore();
+
+  // Register Reterm terminal/history/settings handlers
+  registerRetermHandlers();
 
   // Register app handlers using ipcMain API
   ipcMain.handle("app:getInfo", async (_event) => {
@@ -39,11 +47,4 @@ export function registerHandlers(): void {
   });
 
   logger.info("handlers", "✓ IPC handlers registered");
-
-  // TODO: Add more handlers here using ipcMain.handle()
-  // Example:
-  // ipcMain.handle('file:read', async (event, path) => {
-  //   const fs = await import('fs/promises');
-  //   return await fs.readFile(path, 'utf-8');
-  // });
 }
