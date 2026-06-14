@@ -6,49 +6,46 @@ import { HistoryPane } from "../components/history-pane";
 import { CommandPalette } from "../components/command-palette";
 import { TabBar } from "../components/tab-bar";
 import { ProjectSwitcher } from "../components/project-switcher";
-import type { CommandEntry, TerminalBlock, ProjectEntry } from "../lib/types";
-
+import type { CommandEntry, ProjectEntry } from "../lib/types";
 
 interface Tab {
   id: string;
   cwd: string;
-  blocks: TerminalBlock[];
-  runningId: string | null;
+  running: boolean;
 }
 
 export function HomeView() {
   const [tabs, setTabs] = React.useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = React.useState<string>("");
-  const [pendingRerun, setPendingRerun] = React.useState<{ command: string; cwd: string; useOriginalCwd: boolean } | null>(null);
+  const [pendingRerun, setPendingRerun] = React.useState<{
+    command: string;
+    cwd: string;
+    useOriginalCwd: boolean;
+  } | null>(null);
   const [paletteOpen, setPaletteOpen] = React.useState(false);
   const [projectSwitcherOpen, setProjectSwitcherOpen] = React.useState(false);
 
-
   const queryClient = useQueryClient();
 
-  // Fetch all entries for palette (no limit)
   const allEntriesQuery = useQuery({
     queryKey: ["history:list:all"],
     queryFn: () =>
-      window.glazeAPI.glaze.ipc.invoke<{ entries: CommandEntry[] }>("history:list", {
-        limit: 2000,
-      }).then((r) => r.entries),
+      window.glazeAPI.glaze.ipc
+        .invoke<{ entries: CommandEntry[] }>("history:list", { limit: 2000 })
+        .then((r) => r.entries),
     staleTime: 30_000,
   });
-
   const allEntries = allEntriesQuery.data ?? [];
 
-  // Fetch projects list
   const projectsQuery = useQuery({
     queryKey: ["projects:index"],
     queryFn: () =>
-      window.glazeAPI.glaze.ipc.invoke<{ projects: ProjectEntry[] }>("projects:index", {}).then((r) => r.projects),
+      window.glazeAPI.glaze.ipc
+        .invoke<{ projects: ProjectEntry[] }>("projects:index", {})
+        .then((r) => r.projects),
     staleTime: 5 * 60 * 1000,
   });
-
   const projects = projectsQuery.data ?? [];
-  const projectsLoading = projectsQuery.isLoading;
-
 
   const handleRerun = React.useCallback((command: string, cwd: string, useOriginalCwd: boolean) => {
     setPendingRerun({ command, cwd, useOriginalCwd });
@@ -64,14 +61,14 @@ export function HomeView() {
 
   const handleCreateTab = React.useCallback(async (initialCwd?: string) => {
     try {
-      const result = await window.glazeAPI.glaze.ipc.invoke<{ id: string }>("terminal:createSession", {
-        initialCwd,
-      });
+      const result = await window.glazeAPI.glaze.ipc.invoke<{ id: string }>(
+        "terminal:createSession",
+        { initialCwd, cols: 80, rows: 24 },
+      );
       const newTab: Tab = {
         id: result.id,
         cwd: initialCwd || "~",
-        blocks: [],
-        runningId: null,
+        running: false,
       };
       setTabs((prev) => [...prev, newTab]);
       setActiveTabId(result.id);
@@ -80,123 +77,90 @@ export function HomeView() {
     }
   }, []);
 
-  const handleCloseTab = React.useCallback(async (idToClose: string) => {
-    if (tabs.length <= 1) return;
-    try {
-      await window.glazeAPI.glaze.ipc.invoke("terminal:destroySession", { sessionId: idToClose });
-      const idx = tabs.findIndex((t) => t.id === idToClose);
-      const newTabs = tabs.filter((t) => t.id !== idToClose);
-      setTabs(newTabs);
-      if (activeTabId === idToClose) {
-        const nextActiveIdx = Math.max(0, idx - 1);
-        setActiveTabId(newTabs[nextActiveIdx].id);
-      }
-    } catch (err) {
-      console.error("[HomeView:closeTabError]", err);
-    }
-  }, [tabs, activeTabId]);
-
-  const handleExecuteCommand = React.useCallback(
-    async (cmd: string, execCwd?: string) => {
-      if (!cmd || !activeTabId) return;
-      const tab = tabs.find((t) => t.id === activeTabId);
-      if (!tab || tab.runningId !== null) return;
-      const targetCwd = execCwd ?? tab.cwd;
-
+  const handleCloseTab = React.useCallback(
+    async (idToClose: string) => {
+      if (tabs.length <= 1) return;
       try {
-        const result = await window.glazeAPI.glaze.ipc.invoke<{ id: string }>("terminal:execute", {
+        await window.glazeAPI.glaze.ipc.invoke("terminal:destroySession", {
+          sessionId: idToClose,
+        });
+        const idx = tabs.findIndex((t) => t.id === idToClose);
+        const newTabs = tabs.filter((t) => t.id !== idToClose);
+        setTabs(newTabs);
+        if (activeTabId === idToClose) {
+          setActiveTabId(newTabs[Math.max(0, idx - 1)].id);
+        }
+      } catch (err) {
+        console.error("[HomeView:closeTabError]", err);
+      }
+    },
+    [tabs, activeTabId],
+  );
+
+  // Type a command into the active PTY (used by rerun, palette).
+  const handleExecuteCommand = React.useCallback(
+    async (cmd: string, _execCwd?: string) => {
+      if (!cmd || !activeTabId) return;
+      try {
+        await window.glazeAPI.glaze.ipc.invoke("terminal:execute", {
           sessionId: activeTabId,
           command: cmd,
-          cwd: targetCwd,
         });
-
-        const newBlock: TerminalBlock = {
-          id: result.id,
-          command: cmd,
-          cwd: targetCwd,
-          chunks: [],
-          exitCode: null,
-          durationMs: null,
-          running: true,
-        };
-
-        setTabs((prev) =>
-          prev.map((t) =>
-            t.id === activeTabId
-              ? {
-                  ...t,
-                  runningId: result.id,
-                  blocks: [...t.blocks, newBlock],
-                }
-              : t
-          )
-        );
-
-        queryClient.invalidateQueries({ queryKey: ["history:list:all"] });
-        queryClient.invalidateQueries({ queryKey: ["history:list"] });
       } catch (err) {
         console.error("[Terminal:error]", err);
       }
     },
-    [activeTabId, tabs, queryClient]
+    [activeTabId],
   );
 
   const handleInterruptCommand = React.useCallback(async () => {
     if (!activeTabId) return;
-    const tab = tabs.find((t) => t.id === activeTabId);
-    if (!tab || !tab.runningId) return;
     try {
       await window.glazeAPI.glaze.ipc.invoke("terminal:interrupt", {
-        id: tab.runningId,
+        id: "",
         sessionId: activeTabId,
       });
     } catch (err) {
       console.error("[Terminal:interruptError]", err);
     }
-  }, [activeTabId, tabs]);
+  }, [activeTabId]);
 
+  // Programmatic cd via the persistent shell.
   const handleChangeCwd = React.useCallback(
     async (newCwd: string) => {
       if (!activeTabId) return;
-      const tab = tabs.find((t) => t.id === activeTabId);
-      if (tab && tab.runningId !== null) {
-        void handleCreateTab(newCwd);
-        return;
-      }
       try {
         await window.glazeAPI.glaze.ipc.invoke("terminal:changeCwd", {
           sessionId: activeTabId,
           cwd: newCwd,
         });
-        setTabs((prev) =>
-          prev.map((t) => (t.id === activeTabId ? { ...t, cwd: newCwd } : t))
-        );
+        // Optimistic: real cwd comes back via terminal:cwd OSC 7 event.
+        setTabs((prev) => prev.map((t) => (t.id === activeTabId ? { ...t, cwd: newCwd } : t)));
         queryClient.invalidateQueries({ queryKey: ["history:recentFolders"] });
       } catch (err) {
         console.error("[Terminal:changeCwdError]", err);
       }
     },
-    [activeTabId, tabs, handleCreateTab, queryClient]
+    [activeTabId, queryClient],
   );
 
-
-  // Initialize tabs from backend or create first tab
+  // Restore sessions or create the first one.
   React.useEffect(() => {
+    let cancelled = false;
     const init = async () => {
       try {
         const result = await window.glazeAPI.glaze.ipc.invoke<{
           sessions: { id: string; cwd: string; runningId: string | null }[];
         }>("terminal:listSessions", {});
-
+        if (cancelled) return;
         if (result.sessions && result.sessions.length > 0) {
-          const mappedTabs: Tab[] = result.sessions.map((s) => ({
+          const mapped: Tab[] = result.sessions.map((s) => ({
             id: s.id,
             cwd: s.cwd,
-            blocks: [],
-            runningId: s.runningId,
+            running: s.runningId !== null,
           }));
-          setTabs(mappedTabs);
-          setActiveTabId(mappedTabs[0].id);
+          setTabs(mapped);
+          setActiveTabId(mapped[0].id);
         } else {
           void handleCreateTab();
         }
@@ -206,138 +170,110 @@ export function HomeView() {
       }
     };
     void init();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [handleCreateTab]);
 
-  // Listen to output and exit notifications globally
+  // Listen for command boundaries + cwd updates to drive running/cwd state
+  // and to invalidate the history queries.
   React.useEffect(() => {
-    const unsubOutput = window.glazeAPI.glaze.ipc.onNotification(
-      "terminal:output",
+    const unsubStart = window.glazeAPI.glaze.ipc.onNotification(
+      "terminal:commandStart",
       (params: unknown) => {
-        const { sessionId, id, chunk, stream } = params as {
-          sessionId: string;
-          id: string;
-          chunk: string;
-          stream: "stdout" | "stderr";
-        };
+        const p = params as { sessionId: string; cwd: string };
         setTabs((prev) =>
-          prev.map((t) =>
-            t.id === sessionId
-              ? {
-                  ...t,
-                  blocks: t.blocks.map((b) =>
-                    b.id === id
-                      ? { ...b, chunks: [...b.chunks, { text: chunk, stream }] }
-                      : b
-                  ),
-                }
-              : t
-          )
+          prev.map((t) => (t.id === p.sessionId ? { ...t, running: true, cwd: p.cwd } : t)),
         );
-      }
+        queryClient.invalidateQueries({ queryKey: ["history:list:all"] });
+        queryClient.invalidateQueries({ queryKey: ["history:list"] });
+      },
     );
-
-    const unsubExit = window.glazeAPI.glaze.ipc.onNotification(
-      "terminal:exit",
+    const unsubEnd = window.glazeAPI.glaze.ipc.onNotification(
+      "terminal:commandEnd",
       (params: unknown) => {
-        const { sessionId, id, exitCode, cwd: newCwd, durationMs } = params as {
-          sessionId: string;
-          id: string;
-          exitCode: number;
-          cwd: string;
-          durationMs: number;
-        };
+        const p = params as { sessionId: string; cwd: string };
         setTabs((prev) =>
-          prev.map((t) =>
-            t.id === sessionId
-              ? {
-                  ...t,
-                  cwd: newCwd,
-                  runningId: t.runningId === id ? null : t.runningId,
-                  blocks: t.blocks.map((b) =>
-                    b.id === id
-                      ? { ...b, exitCode, durationMs, running: false, cwd: newCwd }
-                      : b
-                  ),
-                }
-              : t
-          )
+          prev.map((t) => (t.id === p.sessionId ? { ...t, running: false, cwd: p.cwd } : t)),
         );
         queryClient.invalidateQueries({ queryKey: ["history:list:all"] });
         queryClient.invalidateQueries({ queryKey: ["history:list"] });
         queryClient.invalidateQueries({ queryKey: ["history:recentFolders"] });
-      }
+      },
     );
-
+    const unsubCwd = window.glazeAPI.glaze.ipc.onNotification(
+      "terminal:cwd",
+      (params: unknown) => {
+        const p = params as { sessionId: string; cwd: string };
+        setTabs((prev) => prev.map((t) => (t.id === p.sessionId ? { ...t, cwd: p.cwd } : t)));
+      },
+    );
+    const unsubClosed = window.glazeAPI.glaze.ipc.onNotification(
+      "terminal:closed",
+      (params: unknown) => {
+        const p = params as { sessionId: string };
+        setTabs((prev) => prev.filter((t) => t.id !== p.sessionId));
+      },
+    );
     return () => {
-      unsubOutput();
-      unsubExit();
+      unsubStart();
+      unsubEnd();
+      unsubCwd();
+      unsubClosed();
     };
   }, [queryClient]);
 
-  // Listen to projects rescan updates
   React.useEffect(() => {
     const unsubIndexReady = window.glazeAPI.glaze.ipc.onNotification(
       "projects:indexReady",
       () => {
         queryClient.invalidateQueries({ queryKey: ["projects:index"] });
-      }
+      },
     );
     return () => {
       unsubIndexReady();
     };
   }, [queryClient]);
 
-
-  // Global keyboard shortcuts
+  // Global shortcuts. xterm consumes most keystrokes when focused, so these
+  // only fire when chrome (toolbar, dialogs) has focus — which is fine for
+  // ⌘K/⌘P/⌘T/⌘W since those are command-key combos that should work anywhere.
   React.useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      // ⌘K to search history
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      const cmd = e.metaKey || e.ctrlKey;
+      if (cmd && e.key === "k") {
         e.preventDefault();
         setPaletteOpen((v) => !v);
         return;
       }
-      // ⌘P or ⌥P to open project switcher
-      if (((e.metaKey || e.ctrlKey) && e.key === "p") || (e.altKey && e.key === "p") || (e.altKey && e.key === "π")) {
+      if ((cmd && e.key === "p") || (e.altKey && (e.key === "p" || e.key === "π"))) {
         e.preventDefault();
         setProjectSwitcherOpen((v) => !v);
         return;
       }
-
-      // ⌘T to create tab
-      if ((e.metaKey || e.ctrlKey) && e.key === "t") {
+      if (cmd && e.key === "t") {
         e.preventDefault();
         void handleCreateTab();
         return;
       }
-      // ⌘W to close tab
-      if ((e.metaKey || e.ctrlKey) && e.key === "w") {
+      if (cmd && e.key === "w") {
         e.preventDefault();
         void handleCloseTab(activeTabId);
         return;
       }
-      // ⌘1 to ⌘9 to switch tabs
-      if ((e.metaKey || e.ctrlKey) && /^[1-9]$/.test(e.key)) {
+      if (cmd && /^[1-9]$/.test(e.key)) {
         e.preventDefault();
-        const tabIdx = parseInt(e.key, 10) - 1;
-        if (tabs[tabIdx]) {
-          setActiveTabId(tabs[tabIdx].id);
-        }
+        const idx = parseInt(e.key, 10) - 1;
+        if (tabs[idx]) setActiveTabId(tabs[idx].id);
       }
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [tabs, activeTabId, handleCreateTab, handleCloseTab]);
-
-  // The ordered list of commands for ↑↓ history in the input
-  const historyCommands = React.useMemo(
-    () => allEntries.map((e) => e.command),
-    [allEntries]
-  );
 
   const activeTab = React.useMemo(
     () => tabs.find((t) => t.id === activeTabId),
-    [tabs, activeTabId]
+    [tabs, activeTabId],
   );
 
   return (
@@ -366,18 +302,15 @@ export function HomeView() {
               key={activeTab.id}
               sessionId={activeTab.id}
               cwd={activeTab.cwd}
-              blocks={activeTab.blocks}
-              runningId={activeTab.runningId}
+              running={activeTab.running}
               onChangeCwd={handleChangeCwd}
               executeCommand={handleExecuteCommand}
               interruptCommand={handleInterruptCommand}
               pendingRerun={pendingRerun}
               onPendingRerunConsumed={handlePendingRerunConsumed}
               onOpenPalette={handleOpenPalette}
-              historyCommands={historyCommands}
               onOpenProjectSwitcher={() => setProjectSwitcherOpen(true)}
             />
-
           ) : (
             <div className="flex-1 flex items-center justify-center text-gray-9 bg-gray-a1">
               Loading sessions...
@@ -395,7 +328,7 @@ export function HomeView() {
       {projectSwitcherOpen && (
         <ProjectSwitcher
           projects={projects}
-          isLoading={projectsLoading}
+          isLoading={projectsQuery.isLoading}
           onClose={() => setProjectSwitcherOpen(false)}
           onSelect={(selectedPath) => {
             void handleChangeCwd(selectedPath);

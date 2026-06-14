@@ -14,6 +14,8 @@ import {
   destroySession,
   listSessions,
   changeCwd,
+  writeToPty,
+  resizePty,
 } from "../services/command-runner.js";
 import {
   listEntries,
@@ -92,8 +94,29 @@ export function registerRetermHandlers(): void {
     const p = (params ?? {}) as Record<string, unknown>;
     const sessionId = assertOptionalString(p?.sessionId, "sessionId");
     const initialCwd = assertOptionalString(p?.initialCwd, "initialCwd");
-    const id = createSession(sessionId, initialCwd);
+    const cols = assertOptionalNumber(p?.cols, "cols") ?? 80;
+    const rows = assertOptionalNumber(p?.rows, "rows") ?? 24;
+    const id = createSession(sessionId, initialCwd, cols, rows);
     return { id };
+  });
+
+  // ── terminal:write — keystrokes from the renderer xterm ──────────────
+  ipcMain.handle("terminal:write", async (_event, params: unknown) => {
+    const p = params as Record<string, unknown>;
+    const sessionId = assertString(p?.sessionId, "sessionId");
+    const data = assertString(p?.data, "data");
+    writeToPty(sessionId, data);
+    return { ok: true };
+  });
+
+  // ── terminal:resize — xterm fit-addon → PTY dimensions ───────────────
+  ipcMain.handle("terminal:resize", async (_event, params: unknown) => {
+    const p = params as Record<string, unknown>;
+    const sessionId = assertString(p?.sessionId, "sessionId");
+    const cols = assertOptionalNumber(p?.cols, "cols") ?? 80;
+    const rows = assertOptionalNumber(p?.rows, "rows") ?? 24;
+    resizePty(sessionId, cols, rows);
+    return { ok: true };
   });
 
   // ── terminal:destroySession ──────────────────────────────────────────

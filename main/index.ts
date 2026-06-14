@@ -68,10 +68,12 @@ async function createMainWindow() {
     minHeight: minWindowHeight,
     title: windowTitle,
     show: false, // Don't show until WebView is ready (prevents flickering)
+    titleBarStyle: "hiddenInset",
+    backgroundColor: "#0d0e12",
     webPreferences: {
       preload: getPreloadPath(),
     },
-  });
+  } as any);
 
   const browserWindowEndTime = Date.now();
   logger.info("main", "⏱️ [COLD_START] BrowserWindow constructor completed", {

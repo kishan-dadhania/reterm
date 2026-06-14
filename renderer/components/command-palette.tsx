@@ -100,6 +100,10 @@ export function CommandPalette({ entries, onClose, onRun }: CommandPaletteProps)
             placeholder="Search command history…"
             className="flex-1 bg-transparent outline-none text-callout text-gray-12 placeholder:text-gray-8 rt-mono"
             aria-label="Search commands"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
           />
           <kbd className="text-caption2 text-gray-7 border border-gray-a3 rounded px-1.5 py-0.5 shrink-0">ESC</kbd>
         </div>

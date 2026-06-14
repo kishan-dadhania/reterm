@@ -144,6 +144,10 @@ export function ProjectSwitcher({ projects, isLoading, onClose, onSelect }: Proj
             placeholder="Search projects by name or path…"
             className="flex-1 bg-transparent outline-none text-callout text-gray-12 placeholder:text-gray-8 rt-mono"
             aria-label="Search projects"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
           />
           <kbd className="text-caption2 text-gray-7 border border-gray-a3 rounded px-1.5 py-0.5 shrink-0">ESC</kbd>
         </div>

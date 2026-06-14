@@ -254,6 +254,10 @@ function HistoryEntryRow({ entry, onRerun, onToggleSave, onUpdateLabels, allLabe
               placeholder="Add label…"
               className="flex-1 min-w-20 h-6 text-caption1 bg-gray-a3 border border-gray-a4 rounded px-2 outline-none focus:border-gray-a6 rt-mono"
               aria-label="Add label"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
             />
             {allLabels
               .filter((l) => !entry.labels.includes(l))
@@ -504,6 +508,10 @@ export function HistoryPane({ onRerun }: HistoryPaneProps) {
             placeholder="Search commands, folders, labels…"
             className="w-full h-8 pl-8 pr-3 text-caption1 bg-gray-a2 border border-gray-a3 rounded-lg outline-none focus:border-gray-a5 rt-mono transition-colors"
             aria-label="Search history"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
           />
           <span className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-8">
