@@ -3,7 +3,7 @@
   "name": "reterm",
   "version": "1.0.0",
   "productName": "Reterm",
-  "description": "Log and replay terminal commands",
+  "description": "Record and replay your terminal sessions",
   "iconDescription": "A terminal command history logger that captures every command executed with timestamps, project folder context, and exit status. Users can browse, search, and rerun past commands from a rich terminal interface, with history retention spanning 30-60 days and the ability to permanently save and label commands. Think of a command prompt or terminal window overlaid with a history timeline, a labeled filing system, or a command log ledger.",
   "private": true,
   "type": "module",
@@ -61,6 +61,6 @@
     "host": {
       "minVersion": "0.5.0.0"
     },
-    "updatedAt": 1781416930961
+    "updatedAt": 1781421773780
   }
 }

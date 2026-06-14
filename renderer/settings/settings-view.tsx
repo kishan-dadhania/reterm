@@ -19,8 +19,10 @@ import {
   SelectTrigger,
   SelectValue,
   toast,
+  Button,
 } from "@glaze/core/components";
 import type { NativeThemeInfo } from "@glaze/core/ipc";
+import { PlusIcon, Trash2Icon } from "lucide-react";
 
 const RETENTION_OPTIONS = [30, 45, 60] as const;
 type RetentionDays = (typeof RETENTION_OPTIONS)[number];
@@ -114,6 +116,87 @@ export function SettingsView() {
     }
   };
 
+  // Roots query and mutations
+  const rootsQuery = useQuery({
+    queryKey: ["settings:projectRoots"],
+    queryFn: () =>
+      window.glazeAPI.glaze.ipc.invoke<{ mountRoots: string[]; gitDiscoveryRoots: string[] }>(
+        "settings:getProjectRoots",
+        {}
+      ),
+    staleTime: 60_000,
+  });
+
+  const roots = rootsQuery.data ?? { mountRoots: [], gitDiscoveryRoots: [] };
+
+  const addMountRootMutation = useMutation({
+    mutationFn: (path: string) =>
+      window.glazeAPI.glaze.ipc.invoke<{ mountRoots: string[] }>("settings:addMountRoot", { path }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["settings:projectRoots"] });
+      toast.success("Added mount root");
+    },
+    onError: (err) => toast.error(`Failed to add: ${err}`),
+  });
+
+  const removeMountRootMutation = useMutation({
+    mutationFn: (path: string) =>
+      window.glazeAPI.glaze.ipc.invoke<{ mountRoots: string[] }>("settings:removeMountRoot", { path }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["settings:projectRoots"] });
+      toast.success("Removed mount root");
+    },
+    onError: (err) => toast.error(`Failed to remove: ${err}`),
+  });
+
+  const addGitRootMutation = useMutation({
+    mutationFn: (path: string) =>
+      window.glazeAPI.glaze.ipc.invoke<{ gitDiscoveryRoots: string[] }>("settings:addGitRoot", { path }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["settings:projectRoots"] });
+      toast.success("Added Git discovery root");
+    },
+    onError: (err) => toast.error(`Failed to add: ${err}`),
+  });
+
+  const removeGitRootMutation = useMutation({
+    mutationFn: (path: string) =>
+      window.glazeAPI.glaze.ipc.invoke<{ gitDiscoveryRoots: string[] }>("settings:removeGitRoot", { path }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["settings:projectRoots"] });
+      toast.success("Removed Git discovery root");
+    },
+    onError: (err) => toast.error(`Failed to remove: ${err}`),
+  });
+
+  const handleBrowseAndAddMountRoot = async () => {
+    try {
+      const result = await window.glazeAPI.glaze.ipc.invoke<{ canceled: boolean; folderPaths: string[] }>(
+        "dialog:openFolder",
+        {}
+      );
+      if (!result.canceled && result.folderPaths.length > 0) {
+        addMountRootMutation.mutate(result.folderPaths[0]);
+      }
+    } catch (err) {
+      toast.error(`Folder browse failed: ${err}`);
+    }
+  };
+
+  const handleBrowseAndAddGitRoot = async () => {
+    try {
+      const result = await window.glazeAPI.glaze.ipc.invoke<{ canceled: boolean; folderPaths: string[] }>(
+        "dialog:openFolder",
+        {}
+      );
+      if (!result.canceled && result.folderPaths.length > 0) {
+        addGitRootMutation.mutate(result.folderPaths[0]);
+      }
+    } catch (err) {
+      toast.error(`Folder browse failed: ${err}`);
+    }
+  };
+
   return (
     <ScrollArea
       toolbar={
@@ -176,6 +259,87 @@ export function SettingsView() {
                 </SelectContent>
               </Select>
             </Field>
+          </FieldGroup>
+        </FieldSet>
+
+        {/* Project Discovery */}
+        <FieldSet>
+          <FieldGroup>
+            <div className="flex flex-col gap-4 w-full">
+              <h3 className="text-sm font-semibold text-gray-12 border-b border-gray-a3 pb-1">Project Discovery</h3>
+
+              {/* Git Discovery Roots */}
+              <div className="flex flex-col gap-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-caption1 font-medium text-gray-11">Git Discovery Roots</span>
+                  <Button
+                    variant="glass"
+                    size="small"
+                    onClick={() => void handleBrowseAndAddGitRoot()}
+                    className="flex items-center gap-1 text-[11px]"
+                  >
+                    <PlusIcon className="size-3" /> Add Root
+                  </Button>
+                </div>
+                <div className="flex flex-col gap-1.5 bg-gray-a2 p-2 rounded-lg border border-gray-a3 min-h-[40px]">
+                  {roots.gitDiscoveryRoots.length === 0 ? (
+                    <span className="text-caption2 text-gray-8 italic p-1">No Git discovery roots added. Scanning disabled.</span>
+                  ) : (
+                    roots.gitDiscoveryRoots.map((path) => (
+                      <div key={path} className="flex justify-between items-center gap-2 px-2 py-1 bg-gray-a3 rounded border border-gray-a2 group">
+                        <span className="rt-mono text-caption2 text-gray-12 truncate flex-1" title={path}>{path}</span>
+                        <button
+                          onClick={() => removeGitRootMutation.mutate(path)}
+                          className="text-gray-8 hover:text-red-9 transition-colors p-1 hover:bg-gray-a4 rounded"
+                          title="Remove Root"
+                        >
+                          <Trash2Icon className="size-3" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <p className="text-[10px] text-gray-8">
+                  Roots under which Reterm recursively walks up to 5 levels deep to discover git projects.
+                </p>
+              </div>
+
+              {/* Mount Roots */}
+              <div className="flex flex-col gap-2 mt-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-caption1 font-medium text-gray-11">Mount Roots</span>
+                  <Button
+                    variant="glass"
+                    size="small"
+                    onClick={() => void handleBrowseAndAddMountRoot()}
+                    className="flex items-center gap-1 text-[11px]"
+                  >
+                    <PlusIcon className="size-3" /> Add Root
+                  </Button>
+                </div>
+                <div className="flex flex-col gap-1.5 bg-gray-a2 p-2 rounded-lg border border-gray-a3 min-h-[40px]">
+                  {roots.mountRoots.length === 0 ? (
+                    <span className="text-caption2 text-gray-8 italic p-1">No mount roots configured.</span>
+                  ) : (
+                    roots.mountRoots.map((path) => (
+                      <div key={path} className="flex justify-between items-center gap-2 px-2 py-1 bg-gray-a3 rounded border border-gray-a2 group">
+                        <span className="rt-mono text-caption2 text-gray-12 truncate flex-1" title={path}>{path}</span>
+                        <button
+                          onClick={() => removeMountRootMutation.mutate(path)}
+                          className="text-gray-8 hover:text-red-9 transition-colors p-1 hover:bg-gray-a4 rounded"
+                          title="Remove Root"
+                        >
+                          <Trash2Icon className="size-3" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <p className="text-[10px] text-gray-8">
+                  Directories whose direct children subfolders will all be listed as project switch targets.
+                </p>
+              </div>
+            </div>
           </FieldGroup>
         </FieldSet>
       </div>

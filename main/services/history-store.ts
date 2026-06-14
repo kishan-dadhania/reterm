@@ -188,3 +188,15 @@ export async function bulkInsertEntries(entries: CommandEntry[]): Promise<number
   await runRetentionCleanup();
   return entries.length;
 }
+
+export async function getRecentFolders(limit: number = 20): Promise<string[]> {
+  const entries = await loadHistory();
+  const set = new Set<string>();
+  for (const e of entries) {
+    if (e.cwd) {
+      set.add(e.cwd);
+      if (set.size >= limit) break;
+    }
+  }
+  return Array.from(set);
+}

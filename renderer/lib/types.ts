@@ -19,3 +19,10 @@ export interface TerminalBlock {
   durationMs: number | null;
   running: boolean;
 }
+
+export interface ProjectEntry {
+  path: string;
+  type: "git" | "mount" | "recent";
+  name: string;
+}
+
